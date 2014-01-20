@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2011-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2011-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 %% @doc A behaviour module for implementing consumers for
@@ -34,7 +34,7 @@
 -export([start_link/2, call_consumer/2, call_consumer/3]).
 -export([behaviour_info/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
-         handle_info/2, prioritise_info/2]).
+         handle_info/2, prioritise_info/3]).
 
 -record(state, {module,
                 module_state}).
@@ -116,7 +116,7 @@ behaviour_info(callbacks) ->
      %%      State = state()
      %%
      %% This callback is invoked by the channel every time a basic.cancel
-     %% is received from the server.
+     %% is sent to the server.
      {handle_cancel, 2},
 
      %% handle_cancel_ok(CancelOk, Cancel, State) -> ok_error()
@@ -128,6 +128,15 @@ behaviour_info(callbacks) ->
      %% This callback is invoked by the channel every time a basic.cancel_ok
      %% is received from the server.
      {handle_cancel_ok, 3},
+
+     %% handle_server_cancel(Cancel, State) -> ok_error()
+     %% where
+     %%      Cancel = #'basic.cancel'{}
+     %%      State = state()
+     %%
+     %% This callback is invoked by the channel every time a basic.cancel
+     %% is received from the server.
+     {handle_server_cancel, 2},
 
      %% handle_deliver(Deliver, Message, State) -> ok_error()
      %% where
@@ -193,8 +202,8 @@ init([ConsumerModule, ExtraParams]) ->
             ignore
     end.
 
-prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _State) -> 1;
-prioritise_info(_, _State)                                     -> 0.
+prioritise_info({'DOWN', _MRef, process, _Pid, _Info}, _Len, _State) -> 1;
+prioritise_info(_, _Len, _State)                                     -> 0.
 
 handle_call({consumer_call, Msg}, From,
             State = #state{module       = ConsumerModule,
@@ -218,7 +227,12 @@ handle_call({consumer_call, Method, Args}, _From,
             #'basic.consume_ok'{} ->
                 ConsumerModule:handle_consume_ok(Method, Args, MState);
             #'basic.cancel'{} ->
-                ConsumerModule:handle_cancel(Method, MState);
+                case Args of
+                    none -> %% server-sent
+                        ConsumerModule:handle_server_cancel(Method, MState);
+                    Pid when is_pid(Pid) -> %% client-sent
+                        ConsumerModule:handle_cancel(Method, MState)
+                end;
             #'basic.cancel_ok'{} ->
                 ConsumerModule:handle_cancel_ok(Method, Args, MState);
             #'basic.deliver'{} ->

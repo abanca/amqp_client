@@ -10,8 +10,8 @@
 %%
 %% The Original Code is RabbitMQ.
 %%
-%% The Initial Developer of the Original Code is VMware, Inc.
-%% Copyright (c) 2007-2012 VMware, Inc.  All rights reserved.
+%% The Initial Developer of the Original Code is GoPivotal, Inc.
+%% Copyright (c) 2007-2013 GoPivotal, Inc.  All rights reserved.
 %%
 
 -module(amqp_uri).
@@ -34,13 +34,15 @@
 %% default values are used.  If the hostname is zero-length, an
 %% #amqp_params_direct{} record is returned; otherwise, an
 %% #amqp_params_network{} record is returned.  Extra parameters may be
-%% specified via the query string (e.g. "?heartbeat=5"). In case of
-%% failure, an {error, {Info, Uri}} tuple is returned.
+%% specified via the query string
+%% (e.g. "?heartbeat=5&amp;auth_mechanism=external"). In case of failure,
+%% an {error, {Info, Uri}} tuple is returned.
 %%
 %% The extra parameters that may be specified are channel_max,
-%% frame_max, and heartbeat.  The extra parameters that may be
-%% specified for an SSL connection are cacertfile, certfile, keyfile,
-%% verify, and fail_if_no_peer_cert.
+%% frame_max, heartbeat and auth_mechanism (the latter can appear more
+%% than once).  The extra parameters that may be specified for an SSL
+%% connection are cacertfile, certfile, keyfile, verify, and
+%% fail_if_no_peer_cert.
 parse(Uri) -> parse(Uri, <<"/">>).
 
 parse(Uri, DefaultVHost) ->
@@ -170,9 +172,10 @@ broker_add_query(Params, ParsedUri, Fields) ->
            end || Field <- Fields], {Params, 2}),
     Params1.
 
-parse_amqp_param(Field, String) when Field =:= channel_max orelse
-                                     Field =:= frame_max   orelse
-                                     Field =:= heartbeat   ->
+parse_amqp_param(Field, String) when Field =:= channel_max        orelse
+                                     Field =:= frame_max          orelse
+                                     Field =:= heartbeat          orelse
+                                     Field =:= connection_timeout ->
     try return(list_to_integer(String))
     catch error:badarg -> fail({not_an_integer, String})
     end;
